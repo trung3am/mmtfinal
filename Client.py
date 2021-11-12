@@ -51,6 +51,7 @@ class Client:
 		self.frameNbr = 0
 		self.frameShow = 1
 		self.totalBufferingTime = 0	
+		self.miniPause = False
 	def createWidgets(self):
 		"""Build GUI."""
 		# Create Setup button
@@ -71,14 +72,14 @@ class Client:
 		self.pause.grid(row=1, column=2, padx=2, pady=2)
 		
 		# Create Foward button
-		self.goforward = Button(self.master, width=20, padx=3, pady=3)
-		self.goforward["text"] = "Foward 1s"
-		self.goforward["command"] = self.goFoward
-		self.goforward.grid(row=1, column=3, padx=2, pady=2)
+		self.gofoward = Button(self.master, width=20, padx=3, pady=3)
+		self.gofoward["text"] = "Foward 2s"
+		self.gofoward["command"] = self.goFoward
+		self.gofoward.grid(row=1, column=3, padx=2, pady=2)
 		
 		# Create Foward button
 		self.gobackward = Button(self.master, width=20, padx=3, pady=3)
-		self.gobackward["text"] = "Backward 1s"
+		self.gobackward["text"] = "Backward 2s"
 		self.gobackward["command"] = self.goBackward
 		self.gobackward.grid(row=1, column=4, padx=2, pady=2)
 
@@ -165,12 +166,14 @@ class Client:
 						
 		
 	def goFoward(self):
+		self.miniPause = True
 		if self.frameNbr - self.frameShow > 20:
 			self.frameShow += 20
 		else:
 			self.frameShow = self.frameNbr
 	
 	def goBackward(self):
+		self.miniPause = True
 		if self.frameShow > 20:
 			self.frameShow -= 20
 		else:
@@ -235,7 +238,9 @@ class Client:
 	def updateMovie(self):
 		"""Update the image file as video frame in the GUI."""
 		while True:
-			
+			if self.miniPause == True:
+				time.sleep(0.6)
+				self.miniPause = False
 			time.sleep(0.04)
 			try:
 				regFrame = "^" + CACHE_FILE_NAME + str(self.sessionId) +'-' + str(self.frameShow) + CACHE_FILE_EXT +"$"

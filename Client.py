@@ -137,6 +137,7 @@ class Client:
 		for f in os.listdir():
 			if re.search(pattern, f):
 				os.remove(f)
+		time.sleep(1.5)
 		self.master.destroy() # Close the gui window
 
 		# os.remove(CACHE_FILE_NAME + str(self.sessionId) + CACHE_FILE_EXT) # Delete the cache image from video
@@ -179,8 +180,10 @@ class Client:
 				self.frameShow += 40
 			else:
 				self.frameShow = self.frameNbr
-			time.sleep(0.6)
+			time.sleep(0.3)
 			self.framePause = False
+			if self.isStreamingData == False:
+				threading.Thread(target=self.listenRtp).start()
 
 	
 	def goBackward(self):
@@ -195,23 +198,29 @@ class Client:
 				self.frameShow -= 40
 			else:
 				self.frameShow = 1
-			time.sleep(0.6)
+			time.sleep(0.3)
 			self.framePause = False
-
+			if self.isStreamingData == False:
+				threading.Thread(target=self.listenRtp).start()
+				
 	def to_integer(self, dt_time):
 		return 3600*dt_time.hour + 60*dt_time.minute + dt_time.second
     
 
 	def listenRtp(self):		
 		"""Listen for RTP packets."""
-
+		self.isStreamingData = True
 		self.startingTime = datetime.now()
 		oldframeNbr = 0
 		self.setClientStat()
 		ploss = 0
 		while True:
 			try:
-
+				print("listen")
+				if (self.frameShow - oldframeNbr > 20 or oldframeNbr - self.frameShow < 20):
+	
+					oldframeNbr = self.frameShow
+					self.setClientStat()
 				data = self.rtpSocket.recv(20480)
 				if data: 
 					rtpPacket = RtpPacket()
@@ -229,15 +238,12 @@ class Client:
 
 					self.dataRate = self.totalByte / abs(self.totalBufferingTime) / 1024 
 					print("Data rate " + "{:.2f}".format(self.dataRate)+ " kb/s" )
-					if (self.frameNbr - oldframeNbr > 20):
-						
-						oldframeNbr = self.frameNbr
-						self.setClientStat()
-					if currFrameNbr == 501:
-						break
+
+
 			
 			except:
 				if self.framePause == True:
+					self.isStreamingData = False
 					break
 				
 				# Upon receiving ACK for TEARDOWN request,
@@ -245,6 +251,7 @@ class Client:
 				if self.teardownAcked == 1:
 					self.rtpSocket.shutdown(socket.SHUT_RDWR)
 					self.rtpSocket.close()
+					self.isStreamingData = False
 					sys.exit()
 					# reconnect to server
 					break
@@ -259,13 +266,15 @@ class Client:
 	
 	def updateMovie(self):
 		"""Update the image file as video frame in the GUI."""
+		instanceFrame = self.frameShow
 		while True:
-			print("outerloop " + str(self.framePause))
+			# print("outerloop " + str(self.framePause))
 			if self.framePause == True:
 				break
-			time.sleep(0.05)
+			time.sleep(0.04)
 			try:
-				print("inner loop")
+				# print("inner loop")
+				
 				regFrame = "^" + CACHE_FILE_NAME + str(self.sessionId) +'-' + str(self.frameShow) + CACHE_FILE_EXT +"$"
 				print(regFrame)
 				for f in os.listdir():
@@ -276,6 +285,10 @@ class Client:
 						self.frameShow +=1
 						self.playingTime = self.frameShow / 20
 						break
+				instanceFrame +=1
+				if instanceFrame - self.frameShow > 3:
+					self.frameShow+= 1
+					instanceFrame = self.frameShow
 			except:
 				if self.framePause == True:
 					break

@@ -137,7 +137,7 @@ class Client:
 		for f in os.listdir():
 			if re.search(pattern, f):
 				os.remove(f)
-		time.sleep(1.5)
+		time.sleep(0.3)
 		self.master.destroy() # Close the gui window
 
 		# os.remove(CACHE_FILE_NAME + str(self.sessionId) + CACHE_FILE_EXT) # Delete the cache image from video
@@ -150,11 +150,13 @@ class Client:
 	
 	def playMovie(self):
 		"""Play button handler."""
+		if self.state == self.INIT:
+			self.connectToServer()
+			time.sleep(0.2)
 		if self.state == self.READY:
 			self.sendRtspRequest(self.PLAY)
 			self.framePause = False
 			
-
 			threading.Thread(target=self.listenRtp).start()
 			threading.Thread(target=self.updateMovie).start()
 
@@ -174,35 +176,46 @@ class Client:
 				self.frameShow += 40
 			else:
 				self.frameShow = self.frameNbr
+			regFrame =  CACHE_FILE_NAME + str(self.sessionId) +'-' + str(self.frameShow) + CACHE_FILE_EXT
+			photo = ImageTk.PhotoImage(Image.open(regFrame))
+			self.label.configure(image=photo, height=288)
+			self.label.image =photo
 		else:
 			self.framePause = True
 			if self.frameNbr - self.frameShow > 40:
 				self.frameShow += 40
 			else:
 				self.frameShow = self.frameNbr
-			time.sleep(0.3)
+			time.sleep(0.1)
 			self.framePause = False
 			if self.isStreamingData == False:
 				threading.Thread(target=self.listenRtp).start()
-
+		self.playingTime = self.frameShow / 20
+		self.setClientStat()
 	
 	def goBackward(self):
 		if self.framePause == True:
-			if self.frameNbr > 40:
+			if self.frameShow > 40:
 				self.frameShow -= 40
 			else:
 				self.frameShow = 1
+			regFrame = CACHE_FILE_NAME + str(self.sessionId) +'-' + str(self.frameShow) + CACHE_FILE_EXT
+			photo = ImageTk.PhotoImage(Image.open(regFrame))
+			self.label.configure(image=photo, height=288)
+			self.label.image =photo
 		else:
 			self.framePause = True
-			if self.frameNbr  > 40:
+			if self.frameShow  > 40:
 				self.frameShow -= 40
 			else:
 				self.frameShow = 1
-			time.sleep(0.3)
+			time.sleep(0.1)
 			self.framePause = False
 			if self.isStreamingData == False:
 				threading.Thread(target=self.listenRtp).start()
-				
+		self.playingTime = self.frameShow / 20
+		self.setClientStat()
+
 	def to_integer(self, dt_time):
 		return 3600*dt_time.hour + 60*dt_time.minute + dt_time.second
     
@@ -216,7 +229,7 @@ class Client:
 		ploss = 0
 		while True:
 			try:
-				print("listen")
+				# print("listen")
 				if (self.frameShow - oldframeNbr > 20 or oldframeNbr - self.frameShow < 20):
 	
 					oldframeNbr = self.frameShow
@@ -237,24 +250,21 @@ class Client:
 					self.lossRate = ploss / self.frameNbr * 100
 
 					self.dataRate = self.totalByte / abs(self.totalBufferingTime) / 1024 
-					print("Data rate " + "{:.2f}".format(self.dataRate)+ " kb/s" )
+					# print("Data rate " + "{:.2f}".format(self.dataRate)+ " kb/s" )
 
 
 			
 			except:
 				if self.framePause == True:
 					self.isStreamingData = False
+					if self.teardownAcked ==1:
+						self.rtpSocket.shutdown(socket.SHUT_WR)
+						self.rtpSocket.close()
 					break
 				
 				# Upon receiving ACK for TEARDOWN request,
 				# close the RTP socket
-				if self.teardownAcked == 1:
-					self.rtpSocket.shutdown(socket.SHUT_RDWR)
-					self.rtpSocket.close()
-					self.isStreamingData = False
-					sys.exit()
-					# reconnect to server
-					break
+
 					
 	def writeFrame(self, data):
 		"""Write the received frame to a temp image file. Return the image file."""
@@ -271,12 +281,12 @@ class Client:
 			# print("outerloop " + str(self.framePause))
 			if self.framePause == True:
 				break
-			time.sleep(0.04)
+			time.sleep(0.05)
 			try:
 				# print("inner loop")
 				
 				regFrame = "^" + CACHE_FILE_NAME + str(self.sessionId) +'-' + str(self.frameShow) + CACHE_FILE_EXT +"$"
-				print(regFrame)
+				# print(regFrame)
 				for f in os.listdir():
 					if re.search(regFrame,f):
 						photo = ImageTk.PhotoImage(Image.open(str(f)))
@@ -448,19 +458,18 @@ class Client:
 						self.state = self.INIT
 						# Flag the teardownAcked to close the socket.
 						self.teardownAcked = 1 
-						time.sleep(0.5)
 						self.miniPause = False
 						self.rtspSeq = 0
 						self.sessionId = 0
 						self.requestSent = -1
-						self.teardownAcked = 0
+						self.framePause = True
 						self.frameNbr = 0
 						self.frameShow = 1
 						self.totalBufferingTime = 0
-						self.framePause = True
-
-						self.connectToServer()
-						time.sleep(0.5) #waiting for server respone before setup again
+						time.sleep(0.1)
+						self.teardownAcked = 0
+						
+						time.sleep(0.1) #waiting for server respone before setup again
 						pattern = "jpg$"
 						for f in os.listdir():
 							if re.search(pattern, f):
@@ -492,8 +501,12 @@ class Client:
 
 	def handler(self):
 		"""Handler on explicitly closing the GUI window."""
+		flag = False
+		if self.state == self.PLAYING:
+			flag = True
 		self.pauseMovie()
 		if messagebox.askokcancel("Quit?", "Are you sure you want to quit?"):
 			self.exitClient()
 		else: # When the user presses cancel, resume playing.
-			self.playMovie()
+			if(flag):
+				self.playMovie()
